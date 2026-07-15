@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entroparc — Lead & Feedback Tracker (Live)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+:root{--navy:#1E3A5F;--blue:#2D9CDB;--blue-light:#56CCF2;--green:#27AE60;--orange:#F2994A;--red:#EB5757;--purple:#9B51E0;--bg:#0F1923;--surface:#162030;--surface2:#1C2B3A;--border:#253547;--text:#E8F1F8;--text-muted:#7A9BB5;--text-dim:#4A6880;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:14px 28px;background:var(--surface);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:100}
+.topbar-left{display:flex;align-items:center;gap:14px}
+.logo-dot{width:10px;height:10px;border-radius:50%;background:var(--blue);box-shadow:0 0 8px var(--blue);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.topbar h1{font-size:15px;font-weight:600;letter-spacing:.3px}
+.topbar h1 span{color:var(--blue)}
+.badge{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:3px 10px;font-size:11px;color:var(--text-muted);font-family:'JetBrains Mono',monospace}
+.badge.live{border-color:var(--green);color:#6fcf97;display:flex;align-items:center;gap:5px}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 1.5s infinite}
+.filter-bar{padding:10px 28px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:8px;overflow-x:auto;align-items:center}
+.app-tab{padding:6px 16px;border-radius:20px;font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text-muted);transition:all .2s;white-space:nowrap}
+.app-tab.active{background:var(--blue);border-color:var(--blue);color:white;box-shadow:0 0 12px rgba(45,156,219,.4)}
+.app-tab:hover:not(.active){border-color:var(--blue);color:var(--text)}
+.loading-overlay{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px}
+.loading-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{font-size:13px;color:var(--text-muted)}
+.loading-sub{font-size:11px;color:var(--text-dim)}
+.main{padding:24px 28px;display:flex;flex-direction:column;gap:20px}
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;position:relative;overflow:hidden;transition:transform .2s,border-color .2s}
+.kpi-card:hover{transform:translateY(-2px);border-color:var(--blue)}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent,var(--blue))}
+.kpi-label{font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+.kpi-value{font-size:34px;font-weight:700;line-height:1;margin-bottom:6px;color:var(--text);font-family:'JetBrains Mono',monospace}
+.kpi-sub{font-size:11px;color:var(--text-dim)}
+.kpi-icon{position:absolute;right:18px;top:18px;font-size:22px;opacity:.25}
+.chart-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:16px}
+.chart-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.chart-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}
+.chart-card h3{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.dot{width:8px;height:8px;border-radius:50%}
+.chart-wrap canvas{max-height:220px}
+.funnel-row{display:flex;flex-direction:column;gap:10px;padding:4px 0}
+.funnel-item{display:flex;align-items:center;gap:12px}
+.funnel-label{font-size:11px;color:var(--text-muted);width:150px;flex-shrink:0}
+.funnel-bar-track{flex:1;height:8px;background:var(--surface2);border-radius:4px;overflow:hidden}
+.funnel-bar-fill{height:100%;border-radius:4px;transition:width 1s cubic-bezier(.4,0,.2,1)}
+.funnel-count{font-size:12px;font-family:'JetBrains Mono',monospace;color:var(--text);width:35px;text-align:right;font-weight:600}
+.feedback-section{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.feedback-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}
+.feedback-card h3{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px}
+.feedback-quote{padding:12px 14px;background:var(--surface2);border-left:3px solid var(--blue);border-radius:0 8px 8px 0;margin-bottom:8px;font-size:11.5px;line-height:1.6;color:var(--text-muted);font-style:italic}
+.feedback-meta{font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:8px;margin-bottom:12px}
+.feedback-meta strong{color:var(--text);font-weight:500}
+.table-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.table-header{padding:16px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.table-header h3{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.search-box{padding:6px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:12px;font-family:'Inter',sans-serif;outline:none;width:220px;transition:border-color .2s}
+.search-box:focus{border-color:var(--blue)}
+.search-box::placeholder{color:var(--text-dim)}
+.filter-row{padding:10px 20px;display:flex;gap:8px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.filter-chip{padding:4px 12px;border-radius:16px;font-size:11px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text-muted);transition:all .15s}
+.filter-chip.active{background:var(--chip-color,var(--blue));border-color:transparent;color:white}
+.filter-chip:hover:not(.active){border-color:var(--blue);color:var(--text)}
+.table-scroll{overflow-x:auto;max-height:420px;overflow-y:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{background:var(--surface2);padding:10px 14px;text-align:left;font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.6px;position:sticky;top:0;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody tr{border-bottom:1px solid rgba(37,53,71,.5);transition:background .15s}
+tbody tr:hover{background:var(--surface2)}
+tbody td{padding:9px 14px;color:var(--text);vertical-align:middle}
+tbody td:first-child{color:var(--text-dim);font-family:'JetBrains Mono',monospace;font-size:11px}
+.pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:12px;font-size:10px;font-weight:600;letter-spacing:.3px;white-space:nowrap}
+.pill-success{background:rgba(39,174,96,.15);color:#6fcf97;border:1px solid rgba(39,174,96,.25)}
+.pill-rejected{background:rgba(235,87,87,.12);color:#eb8787;border:1px solid rgba(235,87,87,.2)}
+.pill-pending{background:rgba(242,153,74,.12);color:#f2b974;border:1px solid rgba(242,153,74,.2)}
+.pill-sent{background:rgba(45,156,219,.12);color:#56b8e0;border:1px solid rgba(45,156,219,.2)}
+.pill-default{background:rgba(122,155,181,.1);color:var(--text-muted);border:1px solid var(--border)}
+.channel-ig{color:#E1306C;font-weight:600;font-size:11px}
+.channel-li{color:#0A66C2;font-weight:600;font-size:11px}
+.feedback-tag{display:inline-block;padding:2px 7px;border-radius:8px;font-size:10px;font-weight:500;background:rgba(155,81,224,.15);color:#c47cf0;border:1px solid rgba(155,81,224,.2)}
+.name-link{color:var(--text);text-decoration:none;font-weight:500}
+.name-link:hover{color:var(--blue);text-decoration:underline}
+.table-footer{padding:12px 20px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);font-size:11px;color:var(--text-dim)}
+.refresh-btn{padding:5px 12px;background:transparent;border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:11px;cursor:pointer;transition:all .2s;font-family:'Inter',sans-serif}
+.refresh-btn:hover{border-color:var(--blue);color:var(--blue)}
+.error-banner{background:rgba(235,87,87,.1);border:1px solid rgba(235,87,87,.3);border-radius:8px;padding:12px 16px;color:#eb8787;font-size:12px;margin:16px 28px;display:none}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.email-kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px}
+.email-progress-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.email-section{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px}
+.email-section h3{font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+/* Period block = one week or one month */
+.ep-block{margin-bottom:10px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.ep-block:last-child{margin-bottom:0}
+.ep-header{background:var(--surface2);padding:6px 12px;display:flex;align-items:center;justify-content:space-between}
+.ep-period{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--text-muted)}
+.ep-total{font-size:10px;color:var(--text-dim)}
+/* App rows inside each block */
+.ep-app-row{display:flex;align-items:center;padding:8px 12px;border-top:1px solid rgba(37,53,71,.5);gap:10px}
+.ep-app-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.ep-app-name{font-size:12px;color:var(--text-muted);flex:1}
+.ep-sent{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--text);min-width:24px;text-align:right}
+.ep-sent-label{font-size:10px;color:var(--text-dim);margin-left:2px}
+.ep-divider{width:1px;height:16px;background:var(--border);flex-shrink:0}
+.ep-rate{font-size:11px;color:var(--text-dim);min-width:52px;text-align:right}
+.ep-status{display:inline-flex;align-items:center;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:600;margin-left:4px}
+.ep-status.ok{background:rgba(39,174,96,.12);color:#6fcf97;border:1px solid rgba(39,174,96,.2)}
+.ep-status.review{background:rgba(242,153,74,.12);color:#f2b974;border:1px solid rgba(242,153,74,.2)}
+.ep-zero .ep-sent{color:var(--text-dim)}
+.ep-zero .ep-app-name{color:var(--text-dim)}
+.email-empty{text-align:center;padding:32px;color:var(--text-dim);font-size:12px;line-height:1.8}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Memuat data dari Google Sheets...</div>
+  <div class="loading-sub">Mohon tunggu sebentar</div>
+</div>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="logo-dot"></div>
+    <h1>Entroparc <span>Lead &amp; Feedback Tracker</span></h1>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center">
+    <button class="refresh-btn" onclick="loadData()">⟳ Refresh</button>
+    <div class="badge live"><div class="live-dot"></div><span id="lastUpdate">Live</span></div>
+    <div class="badge" id="totalBadge">— Leads</div>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <button class="app-tab active" id="tab-threom" onclick="switchApp('threom',this)">🎙️ Threom</button>
+  <button class="app-tab" id="tab-siftor" onclick="switchApp('siftor',this)">📊 Siftor</button>
+  <button class="app-tab" id="tab-cold-email" onclick="switchToColdEmail(this)">📧 Cold Email</button>
+  <button class="app-tab" onclick="showAddAppInfo()">＋ Add App</button>
+</div>
+
+<div class="error-banner" id="errorBanner">
+  ⚠️ Gagal memuat data. Pastikan koneksi internet aktif lalu klik Refresh. Jika masih gagal, coba buka di browser lain (Chrome direkomendasikan).
+</div>
+
+<div class="main" id="mainContent" style="display:none">
+  <div class="kpi-row">
+    <div class="kpi-card" style="--accent:#2D9CDB"><div class="kpi-icon">👥</div><div class="kpi-label">Total Leads</div><div class="kpi-value" id="kpi-total">—</div><div class="kpi-sub" id="kpi-total-sub">across all channels</div></div>
+    <div class="kpi-card" style="--accent:#27AE60"><div class="kpi-icon">💬</div><div class="kpi-label">Responded</div><div class="kpi-value" id="kpi-responded">—</div><div class="kpi-sub" id="kpi-responded-sub"></div></div>
+    <div class="kpi-card" style="--accent:#9B51E0"><div class="kpi-icon">✅</div><div class="kpi-label">Gave Feedback</div><div class="kpi-value" id="kpi-feedback">—</div><div class="kpi-sub" id="kpi-feedback-sub"></div></div>
+    <div class="kpi-card" style="--accent:#F2994A"><div class="kpi-icon">🏆</div><div class="kpi-label">Closed Success</div><div class="kpi-value" id="kpi-success">—</div><div class="kpi-sub" id="kpi-success-sub"></div></div>
+  </div>
+  <div class="chart-grid">
+    <div class="chart-card"><h3><span class="dot" style="background:var(--blue)"></span>Outreach by Channel</h3><div class="chart-wrap"><canvas id="channelChart"></canvas></div></div>
+    <div class="chart-card"><h3><span class="dot" style="background:var(--green)"></span>Conversion Funnel</h3><div class="funnel-row" id="funnelDisplay"></div></div>
+  </div>
+  <div class="chart-grid-3">
+    <div class="chart-card"><h3><span class="dot" style="background:var(--purple)"></span>Response Breakdown</h3><div class="chart-wrap"><canvas id="responseChart"></canvas></div></div>
+    <div class="chart-card"><h3><span class="dot" style="background:var(--orange)"></span>Feedback Categories</h3><div class="chart-wrap"><canvas id="feedbackChart"></canvas></div></div>
+    <div class="chart-card"><h3><span class="dot" style="background:var(--blue-light)"></span>Lead Status</h3><div class="chart-wrap"><canvas id="statusChart"></canvas></div></div>
+  </div>
+  <div class="feedback-section">
+    <div class="feedback-card"><h3>💬 Notable Feedback Highlights</h3><div id="feedbackHighlights"></div></div>
+    <div class="chart-card"><h3><span class="dot" style="background:var(--green)"></span>Channel Efficiency</h3><div class="chart-wrap"><canvas id="efficiencyChart"></canvas></div></div>
+  </div>
+  <div class="table-card">
+    <div class="table-header">
+      <h3 id="tableTitle">📋 All Leads</h3>
+      <input class="search-box" type="text" placeholder="🔍 Search name, channel, status..." oninput="filterTable(this.value)" id="searchInput">
+    </div>
+    <div class="filter-row">
+      <button class="filter-chip active" data-filter="all" onclick="setFilter('all',this)" style="--chip-color:#2D9CDB">All</button>
+      <button class="filter-chip" data-filter="Closed - Success" onclick="setFilter('Closed - Success',this)" style="--chip-color:#27AE60">✅ Success</button>
+      <button class="filter-chip" data-filter="Follow Up" onclick="setFilter('Follow Up',this)" style="--chip-color:#F2994A">🔄 Follow Up</button>
+      <button class="filter-chip" data-filter="Invitation Connect Sent" onclick="setFilter('Invitation Connect Sent',this)" style="--chip-color:#2D9CDB">📨 Connect Sent</button>
+      <button class="filter-chip" data-filter="Send Message" onclick="setFilter('Send Message',this)" style="--chip-color:#56CCF2">✉️ Send Message</button>
+      <button class="filter-chip" data-filter="Closed - Rejected" onclick="setFilter('Closed - Rejected',this)" style="--chip-color:#EB5757">❌ Rejected</button>
+      <button class="filter-chip" data-filter="hasFeedback" onclick="setFilter('hasFeedback',this)" style="--chip-color:#9B51E0">💡 Has Feedback</button>
+    </div>
+    <div class="table-scroll"><table><thead><tr><th>#</th><th>Lead Name</th><th>Channel</th><th>Outreach Status</th><th>Response</th><th>Feedback Category</th><th>Feedback Detail</th></tr></thead><tbody id="leadsTableBody"></tbody></table></div>
+    <div class="table-footer"><span id="footerCount"></span><span>Synced from Google Sheets · Entroparc Lead Tracker</span></div>
+  </div>
+</div>
+
+<!-- ═══════════ COLD EMAIL PANEL ═══════════ -->
+<div class="main" id="coldEmailContent" style="display:none">
+
+  <!-- KPI cards -->
+  <div class="email-kpi-row">
+    <div class="kpi-card" style="--accent:#2D9CDB"><div class="kpi-icon">📤</div><div class="kpi-label">Total Sent</div><div class="kpi-value" id="em-total-sent">—</div><div class="kpi-sub">all time</div></div>
+    <div class="kpi-card" style="--accent:#27AE60"><div class="kpi-icon">💬</div><div class="kpi-label">Total Replies</div><div class="kpi-value" id="em-total-replies">—</div><div class="kpi-sub">all time</div></div>
+    <div class="kpi-card" style="--accent:#9B51E0"><div class="kpi-icon">📈</div><div class="kpi-label">Reply Rate</div><div class="kpi-value" id="em-reply-rate">—</div><div class="kpi-sub">Replies ÷ Sent</div></div>
+    <div class="kpi-card" style="--accent:#F2994A"><div class="kpi-icon">⚠️</div><div class="kpi-label">Bounce Rate</div><div class="kpi-value" id="em-bounce-rate">—</div><div class="kpi-sub">Target &lt; 3%</div></div>
+    <div class="kpi-card" style="--accent:#EB5757"><div class="kpi-icon">🚫</div><div class="kpi-label">Spam Rate</div><div class="kpi-value" id="em-spam-rate">—</div><div class="kpi-sub">Target &lt; 0.1%</div></div>
+  </div>
+
+  <!-- Weekly + Monthly side by side -->
+  <div class="email-progress-grid">
+
+    <div class="email-section">
+      <h3><span class="dot" style="background:var(--blue)"></span>Weekly Progress</h3>
+      <div id="em-weekly-list"></div>
+    </div>
+
+    <div class="email-section">
+      <h3><span class="dot" style="background:var(--purple)"></span>Monthly Progress</h3>
+      <div id="em-monthly-list"></div>
+    </div>
+
+  </div>
+</div>
+<!-- ═══════════ END COLD EMAIL PANEL ═══════════ -->
+
+<script>
+const SHEETS_URLS = {
+  threom: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSiiMYxHUiqgv_lfkkoEGliMqRz-Bo2k61Q0ehpSkRLthmHQ81dGBhY4d7Zftl_8bPSKN5AT57ilp2C/pub?gid=1475021177&single=true&output=csv',
+  siftor: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSiiMYxHUiqgv_lfkkoEGliMqRz-Bo2k61Q0ehpSkRLthmHQ81dGBhY4d7Zftl_8bPSKN5AT57ilp2C/pub?gid=811311095&single=true&output=csv',
+  // ↓ Paste CSV links from Email_Monitoring_Tracker here after publishing to web
+  'cold-email-log':     'https://docs.google.com/spreadsheets/d/e/2PACX-1vSJ0XG7SiNV39SZuDjZmj1HUpePTUQorG-tuHmMOBQBfhxPRdFKCL4If0myfk3BPA/pub?gid=1512233617&single=true&output=csv',
+  'cold-email-summary': 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSJ0XG7SiNV39SZuDjZmj1HUpePTUQorG-tuHmMOBQBfhxPRdFKCL4If0myfk3BPA/pub?gid=1253052234&single=true&output=csv'
+};
+
+let allData = {};
+let currentApp = 'threom';
+let currentFilter = 'all';
+let currentSearch = '';
+let charts = {};
+
+async function loadData() {
+  document.getElementById('loadingOverlay').style.display = 'flex';
+  document.getElementById('mainContent').style.display = 'none';
+  document.getElementById('errorBanner').style.display = 'none';
+
+  try {
+    const url = SHEETS_URLS[currentApp];
+    if (!url) { allData[currentApp] = []; renderAll(); return; }
+
+    // Try multiple CORS proxies as fallbacks
+    const proxies = [
+      csv => 'https://corsproxy.io/?' + encodeURIComponent(csv),
+      csv => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(csv),
+      csv => 'https://thingproxy.freeboard.io/fetch/' + encodeURIComponent(csv),
+    ];
+
+    let csvText = null;
+    let lastError = null;
+
+    for (const makeProxy of proxies) {
+      try {
+        const proxyUrl = makeProxy(url);
+        const res = await fetch(proxyUrl);
+        if (!res.ok) continue;
+        const text = await res.text();
+        if (text && text.includes(',') && text.length > 50) {
+          csvText = text;
+          break;
+        }
+      } catch(err) {
+        lastError = err;
+        continue;
+      }
+    }
+
+    if (!csvText) throw new Error('All proxies failed: ' + lastError);
+
+    // Find the real header row (contains 'Lead Name')
+    const allRows = csvText.split('\n');
+    let headerIdx = 0;
+    for (let i = 0; i < allRows.length; i++) {
+      if (allRows[i].includes('Lead Name')) { headerIdx = i; break; }
+    }
+    const cleanCsv = allRows.slice(headerIdx).join('\n');
+
+    const parsed = Papa.parse(cleanCsv, { header: true, skipEmptyLines: true });
+
+    allData[currentApp] = parsed.data
+      .filter(r => r['Lead Name'] && r['Lead Name'].trim())
+      .map(r => [
+        r['No'] || '',
+        (r['Lead Name'] || '').trim(),
+        (r['Channel'] || '').trim(),
+        (r['Profile Link'] || '').trim(),
+        (r['Outreach Status'] || '').trim(),
+        (r['Response'] || '').trim(),
+        (r['Feedback Category'] || '').trim(),
+        (r['Feedback Details'] || '').trim(),
+        (r['Date Added'] || '').trim(),
+      ]);
+
+    const now = new Date();
+    document.getElementById('lastUpdate').textContent = 'Updated ' + now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    document.getElementById('totalBadge').textContent = allData[currentApp].length + ' Leads';
+    renderAll();
+
+  } catch(e) {
+    console.error(e);
+    document.getElementById('loadingOverlay').style.display = 'none';
+    document.getElementById('errorBanner').style.display = 'block';
+    document.getElementById('mainContent').style.display = 'flex';
+  }
+}
+
+function renderAll() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+  document.getElementById('mainContent').style.display = 'flex';
+  updateKPIs(); updateFunnel(); buildCharts(); updateFeedbackHighlights(); renderTable();
+}
+
+function getData() { return allData[currentApp] || []; }
+
+function getFiltered() {
+  let d = getData();
+  if (currentFilter === 'hasFeedback') d = d.filter(r => r[6] && r[6].trim());
+  else if (currentFilter !== 'all') d = d.filter(r => r[4] === currentFilter);
+  if (currentSearch) {
+    const q = currentSearch.toLowerCase();
+    d = d.filter(r => r[1].toLowerCase().includes(q) || r[2].toLowerCase().includes(q) || r[4].toLowerCase().includes(q) || r[5].toLowerCase().includes(q) || r[6].toLowerCase().includes(q));
+  }
+  return d;
+}
+
+function updateKPIs() {
+  const d = getData(), total = d.length;
+  const responded = d.filter(r => r[5] && r[5] !== '' && r[5] !== 'No Respons').length;
+  const hasFb = d.filter(r => r[6] && r[6].trim() !== '').length;
+  const success = d.filter(r => r[4] === 'Closed - Success').length;
+  document.getElementById('kpi-total').textContent = total;
+  document.getElementById('kpi-responded').textContent = responded;
+  document.getElementById('kpi-responded-sub').textContent = total > 0 ? ((responded/total)*100).toFixed(1)+'% response rate' : '';
+  document.getElementById('kpi-feedback').textContent = hasFb;
+  document.getElementById('kpi-feedback-sub').textContent = total > 0 ? ((hasFb/total)*100).toFixed(1)+'% feedback rate' : '';
+  document.getElementById('kpi-success').textContent = success;
+  document.getElementById('kpi-success-sub').textContent = total > 0 ? ((success/total)*100).toFixed(1)+'% conversion' : '';
+}
+
+function updateFunnel() {
+  const d = getData(), total = d.length;
+  if (!total) return;
+  const steps = [
+    {label:'Total Outreached', count:total, color:'#2D9CDB'},
+    {label:'Engaged (Follow Up+)', count:d.filter(r=>['Follow Up','Closed - Success','Closed - Rejected'].includes(r[4])).length, color:'#56CCF2'},
+    {label:'Gave Any Response', count:d.filter(r=>r[5]&&r[5]!==''&&r[5]!=='No Respons').length, color:'#9B51E0'},
+    {label:'Gave Feedback', count:d.filter(r=>r[6]&&r[6].trim()).length, color:'#F2994A'},
+    {label:'Tested the App', count:d.filter(r=>r[5]==='Tested').length, color:'#27AE60'},
+  ];
+  document.getElementById('funnelDisplay').innerHTML = steps.map(s =>
+    '<div class="funnel-item"><div class="funnel-label">'+s.label+'</div><div class="funnel-bar-track"><div class="funnel-bar-fill" style="width:'+(s.count/total*100).toFixed(1)+'%;background:'+s.color+'"></div></div><div class="funnel-count">'+s.count+'</div></div>'
+  ).join('');
+}
+
+const COLORS = ['#2D9CDB','#27AE60','#F2994A','#EB5757','#9B51E0','#56CCF2','#F2C94C','#FF8C69'];
+function destroyChart(id) { if(charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function buildCharts() {
+  const d = getData();
+
+  destroyChart('channelChart');
+  const channels = {};
+  d.forEach(r => { const ch = r[2]||'Unknown'; channels[ch]=(channels[ch]||0)+1; });
+  charts['channelChart'] = new Chart(document.getElementById('channelChart'), {
+    type:'bar',
+    data:{labels:Object.keys(channels),datasets:[{data:Object.values(channels),backgroundColor:['#E1306C','#0A66C2','#EA4335','#1DA1F2','#25D366'],borderRadius:6,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#7A9BB5',font:{size:11}},grid:{color:'rgba(37,53,71,.5)'}},y:{ticks:{color:'#7A9BB5',font:{size:11}},grid:{color:'rgba(37,53,71,.5)'},beginAtZero:true}}}
+  });
+
+  destroyChart('responseChart');
+  const rc = {};
+  d.forEach(r => { const v=r[5]||'(No Reply)'; rc[v]=(rc[v]||0)+1; });
+  const rl = Object.keys(rc).filter(k=>rc[k]>0);
+  charts['responseChart'] = new Chart(document.getElementById('responseChart'), {
+    type:'doughnut',
+    data:{labels:rl,datasets:[{data:rl.map(k=>rc[k]),backgroundColor:COLORS,borderWidth:2,borderColor:'#162030'}]},
+    options:{responsive:true,maintainAspectRatio:true,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#7A9BB5',font:{size:10},padding:8,boxWidth:12}}}}
+  });
+
+  destroyChart('feedbackChart');
+  const fc = {};
+  d.forEach(r => { if(r[6]&&r[6].trim()) fc[r[6]]=(fc[r[6]]||0)+1; });
+  charts['feedbackChart'] = new Chart(document.getElementById('feedbackChart'), {
+    type:'bar',
+    data:{labels:Object.keys(fc),datasets:[{data:Object.values(fc),backgroundColor:COLORS,borderRadius:4,borderSkipped:false}]},
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:true,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#7A9BB5',font:{size:10}},grid:{color:'rgba(37,53,71,.5)'},beginAtZero:true},y:{ticks:{color:'#7A9BB5',font:{size:9}},grid:{color:'rgba(37,53,71,.5)'}}}}
+  });
+
+  destroyChart('statusChart');
+  const sc = {};
+  d.forEach(r => { sc[r[4]]=(sc[r[4]]||0)+1; });
+  charts['statusChart'] = new Chart(document.getElementById('statusChart'), {
+    type:'pie',
+    data:{labels:Object.keys(sc),datasets:[{data:Object.values(sc),backgroundColor:COLORS,borderWidth:2,borderColor:'#162030'}]},
+    options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'bottom',labels:{color:'#7A9BB5',font:{size:9},padding:6,boxWidth:10}}}}
+  });
+
+  destroyChart('efficiencyChart');
+  const chs = [...new Set(d.map(r=>r[2]))].filter(Boolean);
+  const eff = chs.map(ch => { const cd=d.filter(r=>r[2]===ch); const fb=cd.filter(r=>r[6]&&r[6].trim()).length; return cd.length?((fb/cd.length)*100).toFixed(1):0; });
+  const respRate = chs.map(ch => { const cd=d.filter(r=>r[2]===ch); const resp=cd.filter(r=>r[5]&&r[5]!==''&&r[5]!=='No Respons').length; return cd.length?((resp/cd.length)*100).toFixed(1):0; });
+  charts['efficiencyChart'] = new Chart(document.getElementById('efficiencyChart'), {
+    type:'bar',
+    data:{labels:chs,datasets:[
+      {label:'Feedback Rate %',data:eff,backgroundColor:['rgba(225,48,108,.7)','rgba(10,102,194,.7)'],borderColor:['#E1306C','#0A66C2'],borderWidth:2,borderRadius:6,borderSkipped:false},
+      {label:'Response Rate %',data:respRate,backgroundColor:['rgba(225,48,108,.3)','rgba(10,102,194,.3)'],borderColor:['#E1306C','#0A66C2'],borderWidth:1,borderRadius:4,borderSkipped:false}
+    ]},
+    options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:'#7A9BB5',font:{size:10},boxWidth:12}}},scales:{x:{ticks:{color:'#7A9BB5',font:{size:11}},grid:{color:'rgba(37,53,71,.5)'}},y:{ticks:{color:'#7A9BB5',font:{size:11},callback:function(v){return v+'%'}},grid:{color:'rgba(37,53,71,.5)'},beginAtZero:true}}}
+  });
+}
+
+function updateFeedbackHighlights() {
+  const d = getData();
+  const withFb = d.filter(r=>r[7]&&r[7].trim()!=='').slice(0,4);
+  const colors = {'General Praise':'#27AE60','Feature Request':'#F2994A','UI/UX Feedback':'#9B51E0','Competitor Comparison':'#2D9CDB','Bugs / Technical Issue':'#EB5757'};
+  const html = withFb.map(r =>
+    '<div class="feedback-quote">'+r[7].substring(0,150)+(r[7].length>150?'…':'')+'</div><div class="feedback-meta"><strong>'+r[1]+'</strong><span style="color:'+(colors[r[6]]||'#7A9BB5')+';font-weight:600">'+r[6]+'</span></div>'
+  ).join('');
+  document.getElementById('feedbackHighlights').innerHTML = html || '<div style="color:var(--text-dim);font-size:12px">No feedback yet.</div>';
+}
+
+function pillFor(s) {
+  const m = {'Closed - Success':'pill-success','Closed - Rejected':'pill-rejected','Follow Up':'pill-pending','Invitation Connect Sent':'pill-sent','Send Message':'pill-sent'};
+  return m[s]||'pill-default';
+}
+
+function renderTable() {
+  const filtered = getFiltered();
+  document.getElementById('leadsTableBody').innerHTML = filtered.map(r => {
+    const nameHtml = r[3]&&r[3].startsWith('http') ? '<a class="name-link" href="'+r[3]+'" target="_blank">'+r[1]+'</a>' : '<span>'+r[1]+'</span>';
+    const chCls = r[2]==='Instagram'?'channel-ig':'channel-li';
+    const fbTag = r[6]?'<span class="feedback-tag">'+r[6]+'</span>':'';
+    const resp = r[5]&&r[5]!==''?r[5]:'<span style="color:var(--text-dim)">—</span>';
+    const detail = r[7]?'<span style="color:var(--text-muted)" title="'+r[7].replace(/"/g,'&quot;')+'">'+r[7].substring(0,70)+(r[7].length>70?'…':'')+'</span>':'';
+    return '<tr><td>'+r[0]+'</td><td>'+nameHtml+'</td><td><span class="'+chCls+'">'+r[2]+'</span></td><td><span class="pill '+pillFor(r[4])+'">'+r[4]+'</span></td><td>'+resp+'</td><td>'+fbTag+'</td><td>'+detail+'</td></tr>';
+  }).join('');
+  const c=filtered.length, t=getData().length;
+  document.getElementById('tableTitle').innerHTML = '📋 All Leads <span style="color:var(--text-dim);font-weight:400;font-size:11px;margin-left:6px">— '+c+' of '+t+'</span>';
+  document.getElementById('footerCount').textContent = c+' lead'+(c!==1?'s':'')+' shown';
+}
+
+function setFilter(f,el) { currentFilter=f; document.querySelectorAll('.filter-chip').forEach(c=>c.classList.remove('active')); el.classList.add('active'); renderTable(); }
+function filterTable(q) { currentSearch=q; renderTable(); }
+
+async function switchApp(app,el) {
+  currentApp=app; currentFilter='all'; currentSearch='';
+  document.getElementById('searchInput').value='';
+  document.querySelectorAll('.filter-chip').forEach(c=>{ if(c.dataset.filter==='all')c.classList.add('active'); else c.classList.remove('active'); });
+  document.querySelectorAll('.app-tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  await loadData();
+}
+
+// ── Cold Email Tab ──
+async function switchToColdEmail(el) {
+  document.querySelectorAll('.app-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('mainContent').style.display = 'none';
+  document.getElementById('errorBanner').style.display = 'none';
+  document.getElementById('coldEmailContent').style.display = 'flex';
+  await loadColdEmailData();
+}
+
+async function fetchEmailCSV(key) {
+  const url = SHEETS_URLS[key];
+  if (!url || url.startsWith('PASTE_')) return null;
+  const proxies = [
+    u => 'https://corsproxy.io/?' + encodeURIComponent(u),
+    u => 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u),
+    u => 'https://thingproxy.freeboard.io/fetch/' + encodeURIComponent(u),
+  ];
+  for (const makeProxy of proxies) {
+    try {
+      const res = await fetch(makeProxy(url));
+      if (!res.ok) continue;
+      const text = await res.text();
+      if (text && text.includes(',') && text.length > 30) return text;
+    } catch(e) { continue; }
+  }
+  return null;
+}
+
+function pctFmt(val) {
+  const n = parseFloat(val);
+  if (!n || isNaN(n)) return '0%';
+  return (n < 1 ? (n * 100) : n).toFixed(1) + '%';
+}
+
+// App color dots: Threom = blue, Siftor = purple
+const APP_DOTS = { 'Threom': '#2D9CDB', 'Siftor': '#9B51E0' };
+
+// Build one period block (e.g. "Week 3" or "Jul 2026") with Threom + Siftor rows inside
+function buildPeriodBlock(period, appRows) {
+  const totalSent = appRows.reduce((s, r) => s + (parseInt(r.sent) || 0), 0);
+  const appHtml = appRows.map(r => {
+    const isZero = !parseInt(r.sent);
+    const dot = APP_DOTS[r.app] || '#7A9BB5';
+    const statusCls = (r.status||'').toLowerCase() === 'review' ? 'review' : 'ok';
+    return '<div class="ep-app-row' + (isZero ? ' ep-zero' : '') + '">' +
+      '<span class="ep-app-dot" style="background:' + dot + '"></span>' +
+      '<span class="ep-app-name">' + r.app + '</span>' +
+      '<span class="ep-sent">' + (r.sent || 0) + '</span>' +
+      '<span class="ep-sent-label">sent</span>' +
+      '<span class="ep-divider"></span>' +
+      '<span class="ep-rate">' + pctFmt(r.replyRate) + ' reply</span>' +
+      '<span class="ep-status ' + statusCls + '">' + (r.status || 'OK') + '</span>' +
+    '</div>';
+  }).join('');
+  return '<div class="ep-block">' +
+    '<div class="ep-header">' +
+      '<span class="ep-period">' + period + '</span>' +
+      '<span class="ep-total">' + totalSent + ' sent total</span>' +
+    '</div>' +
+    appHtml +
+  '</div>';
+}
+
+// Group flat rows [{period, app, sent, replyRate, status}] by period
+function buildProgressHTML(rows) {
+  if (!rows.length) return '<div class="email-empty">No data yet.<br>Fill in the Email Log tab in your tracker,<br>then paste the CSV link in SHEETS_URLS.</div>';
+  // Group by period preserving order
+  const periods = [], map = {};
+  rows.forEach(r => {
+    if (!map[r.period]) { map[r.period] = []; periods.push(r.period); }
+    map[r.period].push(r);
+  });
+  // Only show periods that have at least one app with data, or always show all
+  return periods.map(p => buildPeriodBlock(p, map[p])).join('');
+}
+
+// Preview data (shown when CSV links are not yet configured)
+const PREVIEW_WEEKLY = [
+  {period:'Week 1', app:'Threom', sent:0, replyRate:0, status:'OK'},
+  {period:'Week 1', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+  {period:'Week 2', app:'Threom', sent:0, replyRate:0, status:'OK'},
+  {period:'Week 2', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+  {period:'Week 3', app:'Threom', sent:6, replyRate:0.1667, status:'OK'},
+  {period:'Week 3', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+  {period:'Week 4', app:'Threom', sent:0, replyRate:0, status:'OK'},
+  {period:'Week 4', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+  {period:'Week 5', app:'Threom', sent:0, replyRate:0, status:'OK'},
+  {period:'Week 5', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+  {period:'Week 6+', app:'Threom', sent:0, replyRate:0, status:'OK'},
+  {period:'Week 6+', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+];
+const PREVIEW_MONTHLY = [
+  {period:'Jul 2026', app:'Threom', sent:6, replyRate:0.1667, status:'OK'},
+  {period:'Jul 2026', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+  {period:'Aug 2026', app:'Threom', sent:0, replyRate:0, status:'OK'},
+  {period:'Aug 2026', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+  {period:'Sep 2026', app:'Threom', sent:0, replyRate:0, status:'OK'},
+  {period:'Sep 2026', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+  {period:'Oct 2026', app:'Threom', sent:0, replyRate:0, status:'OK'},
+  {period:'Oct 2026', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+  {period:'Nov 2026', app:'Threom', sent:0, replyRate:0, status:'OK'},
+  {period:'Nov 2026', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+  {period:'Dec 2026', app:'Threom', sent:0, replyRate:0, status:'OK'},
+  {period:'Dec 2026', app:'Siftor', sent:0, replyRate:0, status:'OK'},
+];
+
+async function loadColdEmailData() {
+  ['em-total-sent','em-total-replies','em-reply-rate','em-bounce-rate','em-spam-rate']
+    .forEach(id => { document.getElementById(id).textContent = '—'; });
+
+  const [logText, summaryText] = await Promise.all([
+    fetchEmailCSV('cold-email-log'),
+    fetchEmailCSV('cold-email-summary')
+  ]);
+
+  // ── KPI from Email Log ──
+  if (logText) {
+    const parsed = Papa.parse(logText, { header: true, skipEmptyLines: true });
+    let rows = parsed.data.filter(r => !Object.values(r).includes('Sent'));
+    let totalSent=0, totalReplies=0, totalBounces=0, totalSpam=0;
+    rows.forEach(r => {
+      const v = Object.values(r);
+      totalSent    += parseInt(v[4])||0;
+      totalBounces += parseInt(v[5])||0;
+      totalSpam    += parseInt(v[6])||0;
+      totalReplies += parseInt(v[7])||0;
+    });
+    document.getElementById('em-total-sent').textContent    = totalSent;
+    document.getElementById('em-total-replies').textContent = totalReplies;
+    document.getElementById('em-reply-rate').textContent    = totalSent>0?((totalReplies/totalSent)*100).toFixed(1)+'%':'0%';
+    document.getElementById('em-bounce-rate').textContent   = totalSent>0?((totalBounces/totalSent)*100).toFixed(1)+'%':'0%';
+    document.getElementById('em-spam-rate').textContent     = totalSent>0?((totalSpam/totalSent)*100).toFixed(1)+'%':'0%';
+  } else {
+    // Preview KPI from sample data
+    document.getElementById('em-total-sent').textContent    = '6';
+    document.getElementById('em-total-replies').textContent = '1';
+    document.getElementById('em-reply-rate').textContent    = '16.7%';
+    document.getElementById('em-bounce-rate').textContent   = '0%';
+    document.getElementById('em-spam-rate').textContent     = '0%';
+  }
+
+  // ── Weekly & Monthly from Progress Summary ──
+  if (summaryText) {
+    const allLines = summaryText.split('\n');
+    const weeklyRows = [], monthlyRows = [];
+    let mode = '';
+    allLines.forEach(line => {
+      if (line.includes('WEEKLY')) { mode='weekly'; return; }
+      if (line.includes('MONTHLY')) { mode='monthly'; return; }
+      if (line.includes('Status flags')) { mode=''; return; }
+      const c = line.split(',').map(x=>x.replace(/^"|"$/g,'').trim());
+      if (!c[0]) return;
+      const row = {period:c[0], app:c[1], sent:parseInt(c[2])||0, replyRate:parseFloat(c[7])||0, status:c[8]||'OK'};
+      if (mode==='weekly' && c[0].startsWith('Week')) weeklyRows.push(row);
+      if (mode==='monthly' && /[A-Z][a-z]+ 20\d\d/.test(c[0])) monthlyRows.push(row);
+    });
+    document.getElementById('em-weekly-list').innerHTML  = buildProgressHTML(weeklyRows);
+    document.getElementById('em-monthly-list').innerHTML = buildProgressHTML(monthlyRows);
+  } else {
+    // Show preview layout while CSV not connected
+    document.getElementById('em-weekly-list').innerHTML  = buildProgressHTML(PREVIEW_WEEKLY);
+    document.getElementById('em-monthly-list').innerHTML = buildProgressHTML(PREVIEW_MONTHLY);
+  }
+}
+
+// Override switchApp to hide cold email panel when switching back to lead tabs
+const _origSwitchApp = switchApp;
+async function switchApp(app, el) {
+  document.getElementById('coldEmailContent').style.display = 'none';
+  await _origSwitchApp(app, el);
+}
+
+function showAddAppInfo() {
+  alert('Untuk menambahkan app baru:\n\n1. Buat sheet baru di Google Sheets\n2. File → Share → Publish to web → pilih sheet → CSV → Publish\n3. Kirim link publish ke developer\n4. Tab baru akan ditambahkan ke dashboard');
+}
+
+loadData();
+</script>
+</body>
+</html>
